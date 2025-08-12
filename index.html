@@ -102,16 +102,16 @@
     let markerLayers = [];
     let lineLayer = null;
     let polygonLayer = null;
+    let locationMarker = null;  // <-- Added to track the moving location marker
 
     // Initialize Leaflet map (center Sri Lanka)
-   const map = L.map('map', { zoomControl:true }).setView([7.8731, 80.7718], 17);
+    const map = L.map('map', { zoomControl:true }).setView([7.8731, 80.7718], 17);
 
     // OpenStreetMap tiles
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-  maxZoom: 19,
-  attribution: 'Tiles &copy; Esri &mdash; Source: Esri, NASA, USGS, FEMA'
-}).addTo(map);
-
+      maxZoom: 19,
+      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, NASA, USGS, FEMA'
+    }).addTo(map);
 
     // Helper: update status UI
     function updateStatus(type, message) {
@@ -138,6 +138,14 @@
     function clearShapes() {
       if (lineLayer) { map.removeLayer(lineLayer); lineLayer = null; }
       if (polygonLayer) { map.removeLayer(polygonLayer); polygonLayer = null; }
+    }
+
+    // Clear location marker
+    function clearLocationMarker() {
+      if (locationMarker) {
+        map.removeLayer(locationMarker);
+        locationMarker = null;
+      }
     }
 
     // Update polygon/line and measurements
@@ -215,7 +223,7 @@
     // Start measurement
     function startMeasurement() {
       startBtn.disabled = true; stopBtn.disabled = false; findBtn.disabled = true;
-      points = []; lastCoords = null; clearMarkers(); clearShapes(); updateStatus('locating', 'Starting measurement...');
+      points = []; lastCoords = null; clearMarkers(); clearShapes(); clearLocationMarker(); updateStatus('locating', 'Starting measurement...');
 
       if (!navigator.geolocation) {
         updateStatus('error', 'Geolocation not supported');
@@ -236,6 +244,18 @@
 
         updateStatus('success', `Tracking position (accuracy: ${Math.round(accuracy)}m)`);
         const current = [longitude, latitude]; // [lng, lat]
+
+        // Create or move location marker
+        if (!locationMarker) {
+          locationMarker = L.circleMarker([latitude, longitude], {
+            radius: 10,
+            color: '#06d6a0',
+            fillColor: '#06d6a0',
+            fillOpacity: 0.9,
+          }).addTo(map);
+        } else {
+          locationMarker.setLatLng([latitude, longitude]);
+        }
 
         if (!lastCoords) {
           lastCoords = current;
@@ -267,6 +287,10 @@
       if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
       startBtn.disabled = false; stopBtn.disabled = true; findBtn.disabled = false;
 
+      clearMarkers();
+      clearLocationMarker();
+      clearShapes();
+
       if (points.length > 2) {
         updateStatus('success', `Measurement complete: ${document.getElementById('area').textContent}`);
       } else {
@@ -285,69 +309,80 @@
     }
 
     // Find location (one-off)
-   function findLocation(retries = 3) {
-  updateStatus('locating', 'Locating your position...');
-  findBtn.disabled = true; startBtn.disabled = true;
+    function findLocation(retries = 3) {
+      updateStatus('locating', 'Locating your position...');
+      findBtn.disabled = true; startBtn.disabled = true;
 
-  if (!navigator.geolocation) {
-    updateStatus('error', 'Geolocation not supported');
-    findBtn.disabled = false; startBtn.disabled = false;
-    alert('Geolocation not supported by your browser.');
-    return;
-  }
-
-  navigator.geolocation.getCurrentPosition((position) => {
-    const { latitude, longitude, accuracy } = position.coords;
-
-    if (accuracy > 30 && retries > 0) {
-      updateStatus('locating', `Low accuracy (${Math.round(accuracy)}m), retrying... (${retries} attempts left)`);
-      findLocation(retries - 1);
-      return;
-    }
-
-    if (accuracy > 30) {
-      updateStatus('error', `Low accuracy (${Math.round(accuracy)}m). Try again outdoors.`);
-      findBtn.disabled = false; startBtn.disabled = false;
-      return;
-    }
-
-    map.setView([latitude, longitude], 17);
-    const m = L.circleMarker([latitude, longitude], { radius:6, color:'#8338ec', fill:true }).addTo(map);
-    markerLayers.push(m);
-    updateStatus('success', `Location found (accuracy: ${Math.round(accuracy)}m)`);
-    findBtn.disabled = false; startBtn.disabled = false;
-    const accuracyPosition = Math.min(accuracy / 20, 100);
-    document.querySelector('.accuracy-marker').style.left = `${accuracyPosition}%`;
-  }, (error) => {
-    let errorMessage;
-    switch(error.code) {
-      case error.PERMISSION_DENIED:
-        errorMessage = 'Permission denied. Please enable location access in settings.'; break;
-      case error.POSITION_UNAVAILABLE:
-        errorMessage = 'Location unavailable. Check your network/GPS.'; break;
-      case error.TIMEOUT:
-        errorMessage = 'Location request timed out. Trying again with lower accuracy...';
-        // Fallback
-        navigator.geolocation.getCurrentPosition((pos) => {
-          map.setView([pos.coords.latitude, pos.coords.longitude], 17);
-          updateStatus('success', 'Approximate location found');
-          findBtn.disabled = false; startBtn.disabled = false;
-        }, (err) => {
-          updateStatus('error', `Error: ${err.message || 'Failed to get location'}`);
-          findBtn.disabled = false; startBtn.disabled = false;
-        }, { enableHighAccuracy: false, timeout: 10000 });
+      if (!navigator.geolocation) {
+        updateStatus('error', 'Geolocation not supported');
+        findBtn.disabled = false; startBtn.disabled = false;
+        alert('Geolocation not supported by your browser.');
         return;
-      default:
-        errorMessage = `Unknown error: ${error.message}`;
+      }
+
+      navigator.geolocation.getCurrentPosition((position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+
+        if (accuracy > 30 && retries > 0) {
+          updateStatus('locating', `Low accuracy (${Math.round(accuracy)}m), retrying... (${retries} attempts left)`);
+          findLocation(retries - 1);
+          return;
+        }
+
+        if (accuracy > 30) {
+          updateStatus('error', `Low accuracy (${Math.round(accuracy)}m). Try again outdoors.`);
+          findBtn.disabled = false; startBtn.disabled = false;
+          return;
+        }
+
+        map.setView([latitude, longitude], 17);
+
+        if (!locationMarker) {
+          locationMarker = L.circleMarker([latitude, longitude], {
+            radius: 10,
+            color: '#8338ec',
+            fillColor: '#8338ec',
+            fillOpacity: 0.9
+          }).addTo(map);
+        } else {
+          locationMarker.setLatLng([latitude, longitude]);
+        }
+
+        updateStatus('success', `Location found (accuracy: ${Math.round(accuracy)}m)`);
+        findBtn.disabled = false; startBtn.disabled = false;
+        const accuracyPosition = Math.min(accuracy / 20, 100);
+        document.querySelector('.accuracy-marker').style.left = `${accuracyPosition}%`;
+      }, (error) => {
+        let errorMessage;
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Permission denied. Please enable location access in settings.'; break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location unavailable. Check your network/GPS.'; break;
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out. Trying again with lower accuracy...';
+            // Fallback
+            navigator.geolocation.getCurrentPosition((pos) => {
+              map.setView([pos.coords.latitude, pos.coords.longitude], 17);
+              updateStatus('success', 'Approximate location found');
+              findBtn.disabled = false; startBtn.disabled = false;
+            }, (err) => {
+              updateStatus('error', `Error: ${err.message || 'Failed to get location'}`);
+              findBtn.disabled = false; startBtn.disabled = false;
+            }, { enableHighAccuracy: false, timeout: 10000 });
+            return;
+          default:
+            errorMessage = `Unknown error: ${error.message}`;
+        }
+        updateStatus('error', errorMessage);
+        findBtn.disabled = false; startBtn.disabled = false;
+      }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
     }
-    updateStatus('error', errorMessage);
-    findBtn.disabled = false; startBtn.disabled = false;
-  }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
-}
 
-
-    // When map is ready
-    map.whenReady(()=>{ updateStatus('success', 'Map loaded. Ready to measure.'); stopBtn.disabled = true; });
+    map.whenReady(() => {
+      updateStatus('success', 'Map loaded. Ready to measure.');
+      stopBtn.disabled = true;
+    });
   </script>
 </body>
 </html>
