@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -22,38 +23,30 @@
       --danger: #ef476f;
       --warning: #ffd166;
     }
-
     * { box-sizing: border-box; margin:0; padding:0; font-family: 'Inter', sans-serif; }
     html,body { height:100%; background:var(--dark); color:#fff }
-
     .header { background:var(--card); padding:14px 16px; display:flex; align-items:center; gap:12px; }
     .main-container { display:flex; flex-direction:column; height:100vh; }
     .map-container { height:50vh; position:relative; }
     #map { position:absolute; top:0; left:0; right:0; bottom:0; }
     .content-container { flex:1; overflow:auto; padding:16px; background:var(--dark); }
-
     .controls { display:flex; gap:10px; margin:16px auto; max-width:760px; }
     .control-btn { padding:12px 20px; border-radius:8px; font-weight:600; border:none; background:var(--accent); color:var(--dark); cursor:pointer; flex:1; max-width:120px; }
     .control-btn.stop { background:var(--danger); color:#fff }
     .control-btn.find { background:#8338ec; color:#fff }
     .control-btn:disabled { background:var(--gray); cursor:not-allowed; color:var(--dark) }
-
     .measurement-info, .status-container { background:var(--card); padding:16px; border-radius:12px; margin-bottom:16px; border:1px solid rgba(255,255,255,0.06); }
     .measurement-info h3 { color:var(--accent); margin-bottom:12px }
     .measurement-info p { display:flex; justify-content:space-between; margin-bottom:10px }
     .label { color:var(--gray) }
     .accuracy-indicator { height:8px; width:100%; background: linear-gradient(90deg, #ef476f 0%, #ffd166 50%, #06d6a0 100%); border-radius:4px; position:relative }
     .accuracy-marker { position:absolute; top:-3px; width:2px; height:14px; background:#fff }
-
     .status-container { display:flex; align-items:center; gap:10px }
     .status-indicator { width:12px; height:12px; border-radius:50%; background:var(--gray) }
     .status-indicator.active { background:var(--success); animation: pulse 1.5s infinite }
     .status-indicator.error { background:var(--danger) }
     @keyframes pulse { 0%{opacity:0.5}50%{opacity:1}100%{opacity:0.5} }
-
     @media(min-width:768px){ .main-container { flex-direction:row } .map-container{ height:100vh; width:50% } .content-container{ width:50%; padding:20px } }
-
-    /* Simple Leaflet marker styles using divIcons */
     .start-marker { width:14px; height:14px; border-radius:50%; background:var(--success); border:2px solid white }
     .path-marker { width:10px; height:10px; border-radius:50%; background:var(--accent); border:1px solid var(--dark) }
   </style>
@@ -87,33 +80,27 @@
   </div>
 
   <script>
-    // Elements
     const statusIndicator = document.getElementById('statusIndicator');
     const statusText = document.getElementById('statusText');
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const findBtn = document.getElementById('findBtn');
 
-    // State
-    let points = []; // stored as [lng, lat] for Turf
-    let lastCoords = null; // [lng, lat]
+    let points = [];
+    let lastCoords = null;
     let watchId = null;
     const MIN_DISTANCE = 3; // meters
     let markerLayers = [];
     let lineLayer = null;
     let polygonLayer = null;
-    let locationMarker = null;  // <-- Added to track the moving location marker
+    let locationMarker = null;
 
-    // Initialize Leaflet map (center Sri Lanka)
     const map = L.map('map', { zoomControl:true }).setView([7.8731, 80.7718], 17);
-
-    // OpenStreetMap tiles
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       maxZoom: 19,
       attribution: 'Tiles &copy; Esri &mdash; Source: Esri, NASA, USGS, FEMA'
     }).addTo(map);
 
-    // Helper: update status UI
     function updateStatus(type, message) {
       statusText.innerHTML = message;
       statusIndicator.className = 'status-indicator';
@@ -122,25 +109,20 @@
         statusText.innerHTML += ' <span class="loading"></span>';
       } else if (type === 'success') {
         statusIndicator.classList.add('active');
-        setTimeout(()=> statusIndicator.classList.remove('active'), 2000);
+        setTimeout(() => statusIndicator.classList.remove('active'), 2000);
       } else if (type === 'error') {
         statusIndicator.classList.add('error');
       }
     }
 
-    // Clear marker layers
     function clearMarkers() {
       markerLayers.forEach(layer => map.removeLayer(layer));
       markerLayers = [];
     }
-
-    // Remove line & polygon
     function clearShapes() {
       if (lineLayer) { map.removeLayer(lineLayer); lineLayer = null; }
       if (polygonLayer) { map.removeLayer(polygonLayer); polygonLayer = null; }
     }
-
-    // Clear location marker
     function clearLocationMarker() {
       if (locationMarker) {
         map.removeLayer(locationMarker);
@@ -148,12 +130,10 @@
       }
     }
 
-    // Update polygon/line and measurements
     function updatePolygon() {
       clearShapes();
 
-      const pointCountEl = document.getElementById('pointCount');
-      pointCountEl.textContent = points.length;
+      document.getElementById('pointCount').textContent = points.length;
 
       if (points.length < 2) {
         document.getElementById('area').textContent = '0 acres';
@@ -161,18 +141,15 @@
         return;
       }
 
-      // Create line (GeoJSON expects [lng,lat])
       const lineFeature = {
         type: 'Feature',
         geometry: { type: 'LineString', coordinates: points }
       };
 
-      // Draw line on map (Leaflet uses [lat,lng])
       const latlngsLine = points.map(p => [p[1], p[0]]);
       lineLayer = L.polyline(latlngsLine, { color: '#f7ee6d', weight: 3, opacity: 0.85 }).addTo(map);
 
       if (points.length >= 3) {
-        // Create polygon GeoJSON
         const polygonFeature = {
           type: 'Feature',
           geometry: { type: 'Polygon', coordinates: [[...points, points[0]]] }
@@ -181,7 +158,6 @@
         const latlngsPoly = [[...points, points[0]].map(p => [p[1], p[0]])];
         polygonLayer = L.polygon(latlngsPoly, { color: '#f7ee6d', fillColor: '#f7ee6d', fillOpacity: 0.25 }).addTo(map);
 
-        // Measurements via Turf
         const areaSqMeters = turf.area(polygonFeature);
         const perimeterMeters = turf.length(polygonFeature, { units: 'kilometers' }) * 1000;
         const areaAcres = areaSqMeters / 4046.86;
@@ -189,13 +165,11 @@
         document.getElementById('area').textContent = `${areaAcres.toFixed(2)} acres`;
         document.getElementById('perimeter').textContent = `${perimeterMeters.toFixed(2)} m`;
       } else {
-        // Just a line
         const lengthMeters = turf.length(lineFeature, { units: 'kilometers' }) * 1000;
         document.getElementById('perimeter').textContent = `${lengthMeters.toFixed(2)} m`;
         document.getElementById('area').textContent = `0 acres`;
       }
 
-      // Send updates to RN WebView if present
       if (window.ReactNativeWebView?.postMessage) {
         const areaText = document.getElementById('area').textContent;
         const perimeterText = document.getElementById('perimeter').textContent;
@@ -211,19 +185,22 @@
       }
     }
 
-    // Add marker helper (uses divIcon classes from CSS)
-    function addMarker(lnglat, isStart=false) {
+    function addMarker(lnglat, isStart = false) {
       const div = document.createElement('div');
       div.className = isStart ? 'start-marker' : 'path-marker';
-      const icon = L.divIcon({ className: '', html: div.outerHTML, iconSize: isStart ? [18,18] : [12,12] });
+      const icon = L.divIcon({ className: '', html: div.outerHTML, iconSize: isStart ? [18, 18] : [12, 12] });
       const marker = L.marker([lnglat[1], lnglat[0]], { icon }).addTo(map);
       markerLayers.push(marker);
     }
 
-    // Start measurement
     function startMeasurement() {
       startBtn.disabled = true; stopBtn.disabled = false; findBtn.disabled = true;
-      points = []; lastCoords = null; clearMarkers(); clearShapes(); clearLocationMarker(); updateStatus('locating', 'Starting measurement...');
+      points = [];
+      lastCoords = null;
+      clearMarkers();
+      clearShapes();
+      clearLocationMarker();
+      updateStatus('locating', 'Starting measurement...');
 
       if (!navigator.geolocation) {
         updateStatus('error', 'Geolocation not supported');
@@ -232,13 +209,13 @@
         return;
       }
 
-      watchId = navigator.geolocation.watchPosition((pos)=>{
+      watchId = navigator.geolocation.watchPosition((pos) => {
         const { latitude, longitude, accuracy } = pos.coords;
         const accuracyPosition = Math.min(accuracy / 20, 100);
         document.querySelector('.accuracy-marker').style.left = `${accuracyPosition}%`;
 
         if (accuracy > 15) {
-          updateStatus('locating', `Low accuracy (${Math.round(accuracy)}m). Moving to better position...`);
+          updateStatus('locating', `Low accuracy (${Math.round(accuracy)}m). Waiting for better position...`);
           return;
         }
 
@@ -260,7 +237,7 @@
         if (!lastCoords) {
           lastCoords = current;
           points.push(current);
-          addMarker(current, true);
+          addMarker(current, true); // Add start marker only once accuracy is good
           updatePolygon();
           map.setView([latitude, longitude], 17);
           return;
@@ -276,13 +253,12 @@
           addMarker(current, false);
           updatePolygon();
         }
-      }, (err)=>{
+      }, (err) => {
         updateStatus('error', 'Location error: ' + err.message);
         startBtn.disabled = false; stopBtn.disabled = true; findBtn.disabled = false;
-      }, { enableHighAccuracy:true, timeout:10000, maximumAge:1000 });
+      }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 1000 });
     }
 
-    // Stop measurement
     function stopMeasurement() {
       if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
       startBtn.disabled = false; stopBtn.disabled = true; findBtn.disabled = false;
@@ -303,12 +279,11 @@
         const areaValue = parseFloat(areaText) || 0;
         const perimeterValue = parseFloat(perimeterText) || 0;
 
-        window.ReactNativeWebView.postMessage(JSON.stringify({ type:'MEASUREMENT_UPDATE', area: areaValue.toFixed(2), perimeter: perimeterValue.toFixed(2), points: points.length }));
-        window.ReactNativeWebView.postMessage(JSON.stringify({ type:'MEASUREMENT_COMPLETE' }));
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'MEASUREMENT_UPDATE', area: areaValue.toFixed(2), perimeter: perimeterValue.toFixed(2), points: points.length }));
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'MEASUREMENT_COMPLETE' }));
       }
     }
 
-    // Find location (one-off)
     function findLocation(retries = 3) {
       updateStatus('locating', 'Locating your position...');
       findBtn.disabled = true; startBtn.disabled = true;
@@ -361,7 +336,6 @@
             errorMessage = 'Location unavailable. Check your network/GPS.'; break;
           case error.TIMEOUT:
             errorMessage = 'Location request timed out. Trying again with lower accuracy...';
-            // Fallback
             navigator.geolocation.getCurrentPosition((pos) => {
               map.setView([pos.coords.latitude, pos.coords.longitude], 17);
               updateStatus('success', 'Approximate location found');
