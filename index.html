@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -40,7 +39,7 @@
     .measurement-info p { display:flex; justify-content:space-between; margin-bottom:10px }
     .label { color:var(--gray) }
     .accuracy-indicator { height:8px; width:100%; background: linear-gradient(90deg, #ef476f 0%, #ffd166 50%, #06d6a0 100%); border-radius:4px; position:relative }
-    .accuracy-marker { position:absolute; top:-3px; width:2px; height:14px; background:#fff }
+    .accuracy-marker { position:absolute; top:-3px; width:2px; height:14px; background:#fff; transition: left 0.3s ease; }
     .status-container { display:flex; align-items:center; gap:10px }
     .status-indicator { width:12px; height:12px; border-radius:50%; background:var(--gray) }
     .status-indicator.active { background:var(--success); animation: pulse 1.5s infinite }
@@ -95,6 +94,7 @@
     let polygonLayer = null;
     let locationMarker = null;
 
+    // Initialize map centered on Sri Lanka
     const map = L.map('map', { zoomControl:true }).setView([7.8731, 80.7718], 17);
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       maxZoom: 19,
@@ -106,7 +106,6 @@
       statusIndicator.className = 'status-indicator';
       if (type === 'locating') {
         statusIndicator.classList.add('active');
-        statusText.innerHTML += ' <span class="loading"></span>';
       } else if (type === 'success') {
         statusIndicator.classList.add('active');
         setTimeout(() => statusIndicator.classList.remove('active'), 2000);
@@ -128,6 +127,14 @@
         map.removeLayer(locationMarker);
         locationMarker = null;
       }
+    }
+
+    // Extract number from text like "12.34 acres" or "123.45 m"
+    function extractNumber(text) {
+      const num = parseFloat(text);
+      if (!isNaN(num)) return num;
+      const match = text.match(/[\d\.]+/);
+      return match ? parseFloat(match[0]) : 0;
     }
 
     function updatePolygon() {
@@ -170,11 +177,12 @@
         document.getElementById('area').textContent = `0 acres`;
       }
 
+      // Post updated measurement data to React Native WebView if available
       if (window.ReactNativeWebView?.postMessage) {
         const areaText = document.getElementById('area').textContent;
         const perimeterText = document.getElementById('perimeter').textContent;
-        const areaValue = parseFloat(areaText) || 0;
-        const perimeterValue = parseFloat(perimeterText) || 0;
+        const areaValue = extractNumber(areaText);
+        const perimeterValue = extractNumber(perimeterText);
 
         window.ReactNativeWebView.postMessage(JSON.stringify({
           type: 'MEASUREMENT_UPDATE',
@@ -211,7 +219,7 @@
 
       watchId = navigator.geolocation.watchPosition((pos) => {
         const { latitude, longitude, accuracy } = pos.coords;
-        const accuracyPosition = Math.min(accuracy / 20, 100);
+        const accuracyPosition = Math.min(accuracy / 20 * 100, 100);
         document.querySelector('.accuracy-marker').style.left = `${accuracyPosition}%`;
 
         if (accuracy > 15) {
@@ -222,7 +230,6 @@
         updateStatus('success', `Tracking position (accuracy: ${Math.round(accuracy)}m)`);
         const current = [longitude, latitude]; // [lng, lat]
 
-        // Create or move location marker
         if (!locationMarker) {
           locationMarker = L.circleMarker([latitude, longitude], {
             radius: 10,
@@ -237,7 +244,7 @@
         if (!lastCoords) {
           lastCoords = current;
           points.push(current);
-          addMarker(current, true); // Add start marker only once accuracy is good
+          addMarker(current, true); // Start marker
           updatePolygon();
           map.setView([latitude, longitude], 17);
           return;
@@ -276,8 +283,8 @@
       if (window.ReactNativeWebView?.postMessage) {
         const areaText = document.getElementById('area').textContent;
         const perimeterText = document.getElementById('perimeter').textContent;
-        const areaValue = parseFloat(areaText) || 0;
-        const perimeterValue = parseFloat(perimeterText) || 0;
+        const areaValue = extractNumber(areaText);
+        const perimeterValue = extractNumber(perimeterText);
 
         window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'MEASUREMENT_UPDATE', area: areaValue.toFixed(2), perimeter: perimeterValue.toFixed(2), points: points.length }));
         window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'MEASUREMENT_COMPLETE' }));
@@ -325,7 +332,7 @@
 
         updateStatus('success', `Location found (accuracy: ${Math.round(accuracy)}m)`);
         findBtn.disabled = false; startBtn.disabled = false;
-        const accuracyPosition = Math.min(accuracy / 20, 100);
+        const accuracyPosition = Math.min(accuracy / 20 * 100, 100);
         document.querySelector('.accuracy-marker').style.left = `${accuracyPosition}%`;
       }, (error) => {
         let errorMessage;
